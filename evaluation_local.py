@@ -31,6 +31,11 @@ def get_join_actions(state, algo_list):
             actions = actions_map[actions_raw]
             joint_actions.append([[actions[0]], [actions[1]]])
 
+        elif algo_list[agent_idx] == 'rule':
+            action_ctrl = [51.1, 0]
+            action_ctrl = [[action_ctrl[0]], [action_ctrl[1]]]
+            joint_actions.append(action_ctrl)
+
     return joint_actions
 
 
@@ -89,7 +94,7 @@ def run_game(env, algo_list, episode, verbose=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--my_ai", default='rl', help='rl/random')
+    parser.add_argument("--my_ai", default='rule', help='rl/random')
     parser.add_argument("--opponent", default='random', help='rl/random')
     parser.add_argument("--episode", default=20)
     args = parser.parse_args()
