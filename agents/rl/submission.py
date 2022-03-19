@@ -74,7 +74,7 @@ class PPO:
 # parser.add_argument("--load_episode", default=300, type=int)
 # args = parser.parse_args()
 model = PPO()
-model.load(episode=300)
+model.load(episode=900)
 
 
 actions_map = {0: [-100, -30], 1: [-100, -18], 2: [-100, -6], 3: [-100, 6], 4: [-100, 18], 5: [-100, 30], 6: [-40, -30],
