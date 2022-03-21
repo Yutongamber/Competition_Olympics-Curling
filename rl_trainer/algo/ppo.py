@@ -10,7 +10,7 @@ import sys
 from os import path
 father_path = path.dirname(__file__)
 sys.path.append(str(os.path.dirname(father_path)))
-from rl_trainer.algo.network import Actor, Critic
+from rl_trainer.algo.PPO.network import Actor, Critic
 from torch.utils.tensorboard import SummaryWriter
 import datetime
 
@@ -19,18 +19,19 @@ class Args:
     clip_param = 0.2
     max_grad_norm = 0.5
     ppo_update_time = 10
-    buffer_capacity = 1000
-    batch_size = 32
+    buffer_capacity = 1000 #NOTE:原先是1000
+    batch_size = 32 #NOTE:原先是32
     gamma = 0.99
     lr = 0.0001
 
     action_space = 36
     # action_space = 3
     state_space = 900
+    ENTROPY_COEFF=1e-2
 
 
 args = Args()
-device = 'cpu'
+device = 'cuda' #NOTE:default：cpu
 
 
 class PPO:
@@ -43,13 +44,14 @@ class PPO:
     action_space = args.action_space
     state_space = args.state_space
     lr = args.lr
+    ENTROPY_COEFF=args.ENTROPY_COEFF
     use_cnn = False
 
     def __init__(self, run_dir=None):
         super(PPO, self).__init__()
         self.args = args
-        self.actor_net = Actor(self.state_space, self.action_space).to(device)
-        self.critic_net = Critic(self.state_space).to(device)
+        self.actor_net = Actor(self.state_space, self.action_space,init_type='orthogonal').to(device)
+        self.critic_net = Critic(self.state_space,init_type='orthogonal').to(device)
         self.buffer = []
         self.counter = 0
         self.training_step = 0
@@ -108,16 +110,22 @@ class PPO:
                 Gt_index = Gt[index].view(-1, 1)
                 V = self.critic_net(state[index].squeeze(1))
                 delta = Gt_index - V
-                advantage = delta.detach()
+                advantage = delta.detach() # 优势函数
                 # epoch iteration, PPO core!!!
                 action_prob = self.actor_net(state[index].squeeze(1)).gather(1, action[index])  # new policy
 
                 ratio = (action_prob / old_action_log_prob[index])
                 surr1 = ratio * advantage
                 surr2 = torch.clamp(ratio, 1 - self.clip_param, 1 + self.clip_param) * advantage
-
+                
+                entropy_bonus = self.actor_net.entropies(action_prob).mean()
                 # update actor network
                 action_loss = -torch.min(surr1, surr2).mean()  # MAX->MIN desent
+                
+                print(action_loss)
+                entropy_loss = -self.ENTROPY_COEFF * entropy_bonus
+                action_loss=action_loss+entropy_loss
+                
                 # self.writer.add_scalar('loss/action_loss', action_loss, global_step=self.training_step)
                 self.actor_optimizer.zero_grad()
                 action_loss.backward()
