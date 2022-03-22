@@ -1,4 +1,5 @@
 from rl_trainer.algo.PPO.random import random_agent
+from agents.rule_2.submission import rule_agent 
 from rl_trainer.algo.PPO.ppo import PPO
 from rl_trainer.log_path import *
 from env.chooseenv import make
@@ -6,6 +7,7 @@ from collections import deque, namedtuple
 import argparse
 import datetime
 import math
+
 
 from torch.utils.tensorboard import SummaryWriter
 import torch
@@ -125,6 +127,9 @@ def main(args):
         Transition = namedtuple(
             'Transition', ['state', 'action', 'a_log_prob', 'reward', 'next_state', 'done'])
 
+    opponent_model=[random_agent, rule_agent, PPO()]
+
+    '''
     if args.opponent == 'random':
         opponent_agent = random_agent()
     else:
@@ -135,7 +140,7 @@ def main(args):
             'the opponent model path is incorrect!')
         opponent_agent.load(opponent_load_dir,
                             episode=args.opponent_load_episode)
-
+    '''
  
     episode = 0
     train_count = 0
