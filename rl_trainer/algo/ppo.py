@@ -10,7 +10,7 @@ import sys
 from os import path
 father_path = path.dirname(__file__)
 sys.path.append(str(os.path.dirname(father_path)))
-from rl_trainer.algo.PPO.network import Actor, Critic
+from rl_trainer.algo.network import Actor, Critic
 from torch.utils.tensorboard import SummaryWriter
 import datetime
 

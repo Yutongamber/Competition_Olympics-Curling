@@ -1,6 +1,6 @@
-from rl_trainer.algo.PPO.random import random_agent
+from rl_trainer.algo.random import random_agent
 from agents.rule_2.submission import rule_agent 
-from rl_trainer.algo.PPO.ppo import PPO
+from rl_trainer.algo.ppo import PPO
 from rl_trainer.log_path import *
 from env.chooseenv import make
 from collections import deque, namedtuple
