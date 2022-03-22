@@ -41,7 +41,7 @@ parser.add_argument("--load_episode", default=1500, type=int)
 parser.add_argument("--ENTROPY_COEFF", default=0.1, type=float)
 parser.add_argument("--user_name", type=str, default='lzw123',
                     help="[for wandb usage], to specify user's name for simply collecting training data.")
-parser.add_argument("--use_wandb", action='store_false', default=False,
+parser.add_argument("--use_wandb", action='store_false', default=True,
                     help="[for wandb usage], by default True, will log date to wandb server. or else will use tensorboard to log data.")
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -176,7 +176,7 @@ def main(args):
         Gt = 0
 
         opponent_agent = random_pick(opponent_model, choose_opponent_prob)
-        opponent_agent=opponent_model[1]
+        # opponent_agent=opponent_model[1]
         if opponent_agent == opponent_model[2]:
             opponent_load_dir = os.path.join(
                 os.path.dirname(run_dir), args.opponent)
@@ -302,6 +302,6 @@ if __name__ == '__main__':
     # args.load_run = 2
     # args.load_episode = 1500
 
-    args.render = True
+    args.render = False
     main(args)
     # print(args.game_name)
