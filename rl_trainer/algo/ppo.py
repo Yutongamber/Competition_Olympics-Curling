@@ -122,7 +122,7 @@ class PPO:
                 # update actor network
                 action_loss = -torch.min(surr1, surr2).mean()  # MAX->MIN desent
                 
-                print(action_loss)
+                # print(action_loss)
                 entropy_loss = -self.ENTROPY_COEFF * entropy_bonus
                 action_loss=action_loss+entropy_loss
                 

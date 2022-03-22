@@ -1,5 +1,5 @@
 from rl_trainer.algo.random import random_agent
-from agents.rule_2.submission import rule_agent 
+from agents.rule_2.submission import *
 from rl_trainer.algo.ppo import PPO
 from rl_trainer.log_path import *
 from env.chooseenv import make
@@ -7,7 +7,7 @@ from collections import deque, namedtuple
 import argparse
 import datetime
 import math
-
+import random
 
 from torch.utils.tensorboard import SummaryWriter
 import torch
@@ -24,9 +24,10 @@ parser.add_argument('--game_name', default="olympics-curling", type=str)
 parser.add_argument('--algo', default="ppo", type=str, help="ppo")
 parser.add_argument('--controlled_player', default=1,
                     help="0(agent purple) or 1(agent green)")
-parser.add_argument('--max_episodes', default=5000, type=int) #NOTE:原先是1500
-parser.add_argument('--opponent', default="random", help="random or run11") #NOTE:默认值是random
-parser.add_argument('--opponent_load_episode', default=None) #NOTE:默认值是None
+parser.add_argument('--max_episodes', default=5000, type=int)  # NOTE:原先是1500
+parser.add_argument('--opponent', default="run1",
+                    help="random or run11")  # NOTE:默认值是random
+parser.add_argument('--opponent_load_episode', default=1500)  # NOTE:默认值是None
 
 parser.add_argument('--seed', default=1, type=int)
 parser.add_argument('--render', action='store_true')
@@ -37,10 +38,10 @@ parser.add_argument("--model_episode", default=0, type=int)
 parser.add_argument("--load_model", action='store_true')  # 加是true；不加为false
 parser.add_argument("--load_run", default=1, type=int)
 parser.add_argument("--load_episode", default=1500, type=int)
-parser.add_argument("--ENTROPY_COEFF",default=0.1,type=float)
+parser.add_argument("--ENTROPY_COEFF", default=0.1, type=float)
 parser.add_argument("--user_name", type=str, default='lzw123',
                     help="[for wandb usage], to specify user's name for simply collecting training data.")
-parser.add_argument("--use_wandb", action='store_false', default=True,
+parser.add_argument("--use_wandb", action='store_false', default=False,
                     help="[for wandb usage], by default True, will log date to wandb server. or else will use tensorboard to log data.")
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -58,24 +59,34 @@ def compute_distance(p1, p2):
     return math.sqrt(dx**2 + dy**2)
 
 
+def random_pick(some_list, probabilities):
+    x = random.uniform(0, 1)
+    cumulative_probability = 0.0
+    for item, item_probability in zip(some_list, probabilities):
+        cumulative_probability += item_probability
+        if x < cumulative_probability:
+            break
+    return item
+
+
 def main(args):
-    
+
     run_dirs = Path(os.path.split(os.path.dirname(os.path.abspath(__file__)))[
-                       0] + "/results") / args.game_name  / args.algo/ args.game_name
+        0] + "/results") / args.game_name / args.algo / args.game_name
     if not run_dirs.exists():
         os.makedirs(str(run_dirs))
-        
+
     run_dir, log_dir = make_logpath(args.game_name, args.algo)
-    if args.use_wandb==True:
+    if args.use_wandb == True:
         run = wandb.init(config=args,
-                        project=args.game_name,
-                        entity=args.user_name,
-                        name=str(args.algo) + "_" +
-                        str(args.game_name) +
-                        "_seed" + str(args.seed),
-                        dir=str(run_dirs),
-                        job_type="training",
-                        reinit=True)
+                         project=args.game_name,
+                         entity=args.user_name,
+                         name=str(args.algo) + "_" +
+                         str(args.game_name) +
+                         "_seed" + str(args.seed),
+                         dir=str(run_dirs),
+                         job_type="training",
+                         reinit=True)
     print("==algo: ", args.algo)
     print(f'device: {device}')
     print(f'model episode: {args.model_episode}')
@@ -86,7 +97,7 @@ def main(args):
 
     num_agents = env.n_player
     print(f'Total agent number: {num_agents}')
-    
+
     ctrl_agent_index = int(args.controlled_player)
 
     print(f'Agent control by the actor: {ctrl_agent_index}')
@@ -107,7 +118,7 @@ def main(args):
 
     torch.manual_seed(args.seed)
     # 定义保存路径
-    
+
     if not args.load_model:
         writer = SummaryWriter(os.path.join(str(log_dir), "{}_{}".format(
             datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.algo)))
@@ -127,7 +138,11 @@ def main(args):
         Transition = namedtuple(
             'Transition', ['state', 'action', 'a_log_prob', 'reward', 'next_state', 'done'])
 
-    opponent_model=[random_agent, rule_agent, PPO()]
+    RuleAgent = rule_agent()
+    RandomAgent = random_agent()
+    PPOAgent = PPO()
+    opponent_model = [RandomAgent, RuleAgent, PPOAgent]
+    choose_opponent_prob = [0.3,0.4 ,0.3 ]
 
     '''
     if args.opponent == 'random':
@@ -141,13 +156,14 @@ def main(args):
         opponent_agent.load(opponent_load_dir,
                             episode=args.opponent_load_episode)
     '''
- 
+
     episode = 0
     train_count = 0
 
     while episode < args.max_episodes:
         # [{'obs':[25,25], "control_player_index": 0}, {'obs':[25,25], "control_player_index": 1}]
         state = env.reset()
+        all_observes=env.all_observes
         if RENDER:
             env.env_core.render()
         obs_ctrl_agent = np.array(
@@ -159,17 +175,41 @@ def main(args):
         step = 0
         Gt = 0
 
+        opponent_agent = random_pick(opponent_model, choose_opponent_prob)
+        opponent_agent=opponent_model[1]
+        if opponent_agent == opponent_model[2]:
+            opponent_load_dir = os.path.join(
+                os.path.dirname(run_dir), args.opponent)
+            assert os.path.exists(opponent_load_dir), print(
+                'the opponent model path is incorrect!')
+            opponent_agent.load(opponent_load_dir,
+                                episode=args.opponent_load_episode)
+
         while True:
 
             ################################# collect opponent action #############################
-            oppo_action_raw, _ = opponent_agent.select_action(
-                obs_oppo_agent, False)
+            # oppo_action_raw, _ = opponent_agent.select_action(
+            #     obs_oppo_agent, False)
+            '''
             if args.opponent != 'random':
                 oppo_action = actions_map[oppo_action_raw]
                 action_opponent = [[oppo_action[0]], [oppo_action[1]]]
             else:
                 action_opponent = oppo_action_raw
                 # action_opponent = [[50], [0]]
+            '''
+            if opponent_agent == opponent_model[0]:
+                oppo_action_raw, _ = opponent_agent.select_action(
+                    obs_oppo_agent, False)
+                action_opponent = oppo_action_raw
+            elif opponent_agent == opponent_model[1]:  # rule agent
+                action_opponent=my_controller_fixed(all_observes[1-ctrl_agent_index])
+                
+            else:
+                oppo_action_raw, _ = opponent_agent.select_action(
+                    obs_oppo_agent, False)
+                oppo_action = actions_map[oppo_action_raw]
+                action_opponent = [[oppo_action[0]], [oppo_action[1]]]
 
             ################################# collect our action ################################
             action_ctrl_raw, action_prob = model.select_action(
@@ -178,7 +218,7 @@ def main(args):
             action_ctrl = actions_map[action_ctrl_raw]
             # wrapping up the action
             action_ctrl = [[action_ctrl[0]], [action_ctrl[1]]]
-            # print('----------------------------------------')
+           
             # print(action_ctrl) # 输出的形式是 [[20], [-18]]
             action = [action_opponent, action_ctrl] if ctrl_agent_index == 1 else [
                 action_ctrl, action_opponent]
@@ -190,7 +230,7 @@ def main(args):
             next_obs_oppo_agent = next_state[1-ctrl_agent_index]['obs']
 
             step += 1
-            
+
             if not done:
                 post_reward = [-1., -1.]
             else:
@@ -199,16 +239,17 @@ def main(args):
                         reward[0], reward[1]-100]  # 证明了这个场景是一个零和博弈
                 else:
                     post_reward = [-1., -1.]
-           
+
             if not args.load_model and env.env_core.current_team == ctrl_agent_index:
                 post_reward[ctrl_agent_index] = - \
                     compute_distance([300, 500], env.env_core.agent_pos[-1])
                 trans = Transition(obs_ctrl_agent, action_ctrl_raw, action_prob, post_reward[ctrl_agent_index],
                                    next_obs_ctrl_agent, done)
                 model.store_transition(trans)
-            
+
             obs_oppo_agent = np.array(next_obs_oppo_agent).flatten()
             obs_ctrl_agent = np.array(next_obs_ctrl_agent).flatten()
+            all_observes=env.all_observes
             if RENDER:
                 env.env_core.render()
             Gt += reward[ctrl_agent_index] if done else 0
@@ -224,12 +265,14 @@ def main(args):
                       "; win rate(controlled & opponent): ", '%.2f' % (
                           sum(record_win)/len(record_win)),
                       '%.2f' % (sum(record_win_op)/len(record_win_op)), '; Trained episode:', train_count)
-                if args.use_wandb==True:
-                    wandb.log({'Episode Return':Gt})
-                    wandb.log({'win rate(controlled & opponent)':(sum(record_win)/len(record_win))})
-                
+                if args.use_wandb == True:
+                    wandb.log({'Episode Return': Gt})
+                    wandb.log({'win rate(controlled & opponent)': (
+                        sum(record_win)/len(record_win))})
+
                 if not args.load_model:
-                    if args.algo == 'ppo' and len(model.buffer) >= model.batch_size: #当buffer大小超过设定值的时候才进行训练
+                    # 当buffer大小超过设定值的时候才进行训练
+                    if args.algo == 'ppo' and len(model.buffer) >= model.batch_size:
                         if win_is == 1:
                             model.update(episode)
                             train_count += 1
@@ -237,16 +280,17 @@ def main(args):
                             model.clear_buffer()
 
                     writer.add_scalar('training Gt', Gt, episode)
-        
+
                 break
         if episode % args.save_interval == 0 and not args.load_model:
             model.save(run_dir, episode)
-    if args.use_wandb==True:
+    if args.use_wandb == True:
         run.finish()
+
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    
+
     # args.controlled_player = 0
     # args.opponent = 'random'
     # args.max_episodes = 5000
@@ -257,7 +301,7 @@ if __name__ == '__main__':
     # args.load_model = True
     # args.load_run = 2
     # args.load_episode = 1500
-    
-    args.render = False
+
+    args.render = True
     main(args)
     # print(args.game_name)
