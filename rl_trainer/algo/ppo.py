@@ -10,7 +10,9 @@ import sys
 from os import path
 father_path = path.dirname(__file__)
 sys.path.append(str(os.path.dirname(father_path)))
-from rl_trainer.algo.network import Actor, Critic
+
+# from rl_trainer.algo.network import Actor, Critic
+from rl_trainer.algo.cnn import Actor,Critic
 from torch.utils.tensorboard import SummaryWriter
 import datetime
 
@@ -28,7 +30,7 @@ class Args:
     # action_space = 3
     state_space = 900
     ENTROPY_COEFF=1e-2
-
+    Use_Entropy=False
 
 args = Args()
 device = 'cuda' #NOTE:default：cpu
@@ -46,6 +48,7 @@ class PPO:
     lr = args.lr
     ENTROPY_COEFF=args.ENTROPY_COEFF
     use_cnn = False
+    use_entropy=args.Use_Entropy
 
     def __init__(self, run_dir=None):
         super(PPO, self).__init__()
@@ -118,13 +121,18 @@ class PPO:
                 surr1 = ratio * advantage
                 surr2 = torch.clamp(ratio, 1 - self.clip_param, 1 + self.clip_param) * advantage
                 
-                entropy_bonus = self.actor_net.entropies(action_prob).mean()
+                # entropy_bonus = self.actor_net.entropies(action_prob).mean()
                 # update actor network
                 action_loss = -torch.min(surr1, surr2).mean()  # MAX->MIN desent
                 
-                # print(action_loss)
-                entropy_loss = -self.ENTROPY_COEFF * entropy_bonus
-                action_loss=action_loss+entropy_loss
+                if self.use_entropy==True:
+                    entropy_bonus = self.actor_net.entropies(action_prob).mean()
+                    entropy_loss = -self.ENTROPY_COEFF * entropy_bonus
+                    action_loss=action_loss+entropy_loss
+                else:
+                    action_loss=action_loss
+               
+                
                 
                 # self.writer.add_scalar('loss/action_loss', action_loss, global_step=self.training_step)
                 self.actor_optimizer.zero_grad()
