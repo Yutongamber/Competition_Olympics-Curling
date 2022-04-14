@@ -33,7 +33,7 @@ COLOR_TO_IDX = {
 
 class rule_agent:
     def __init__(self):
-        self.count = 0
+        self.count = 0 # 这个是记录局内的步数的
         self.obs = None
         self.ball_left = None
         self.ball_first = 0
@@ -45,7 +45,8 @@ class rule_agent:
         self.actions_maybe_good_second_hand = [[0.1, 50], [5, 60], [-5, 60], [0.1, 60]]
         self.if_first_hand = None
         self.first_round = True
-
+        self.first_ball_FirstHand=False
+        self.last_ball_FirstHand=False
     def rolling_reset(self):
         self.count = 0
         self.action_mark = None
@@ -54,7 +55,7 @@ class rule_agent:
         self.count = 0
         self.ball_first = 0
         self.action_mark = None
-        self.actions_maybe_good_first_hand = [[-5, 20], [8, 20], [-8, 30], [10, 30]]
+        self.actions_maybe_good_first_hand = [[-5, 80], [8, 80], [-8, 80], [10, 80]] #default:[[-5, 20], [8, 20], [-8, 30], [10, 30]]
         # self.actions_maybe_good_second_hand = [[0.1, 50], [5, 70], [-5, 70], [0.1, 70]]
         self.actions_maybe_good_second_hand = [[0.1, 50], [5, 60], [-5, 60], [0.1, 60]]
 
@@ -82,7 +83,8 @@ class rule_agent:
             
             # purple 0 - control_idx 0
             # green 1 - control_idx 1
-
+            # print('======================================')
+            # print(self.obs['obs'][0])
 
             # ===================================== 后手策略 ========================================
             if not self.if_first_hand:
@@ -117,7 +119,7 @@ class rule_agent:
 
                     if angle == 0:
                         action = self.actions_maybe_good_second_hand.pop()
-                        angle, force = action[0], action[1]
+                        angle, force = action[0], action[1] # default: 
                     else:
                         if abs(angle) > 20:
                             force = 100
@@ -127,12 +129,26 @@ class rule_agent:
                     action, force = 0, self.action_mark[1]
         
             else: 
-
+                # 似乎最后一个球，没必要放在中心，可以放在圈外
                 # ===================================== 先手策略 ========================================
-                angle = 0
-                force = 100
+                
+                oppo_ball_already1 = 4 - self.obs['throws left'][self.contrl_oppo_player_idx]
+                if oppo_ball_already1==0:
+                    self.first_ball_FirstHand=True
+                    angle = 0 # 前30步的动作
+                    force = 150
+                else:
+                    angle = 0 # 前30步的动作
+                    force = 150
+                    self.first_ball_FirstHand=False
+                if oppo_ball_already1==3: # 我方最后一个球
+                    self.last_ball_FirstHand=True
+                else:
+                    self.last_ball_FirstHand=False
                 if self.count == self.mark:
                     idxs = np.where(self.obs['obs'][0] == COLOR_TO_IDX[team_id[self.contrl_oppo_player_idx]])
+                   
+                    # print(idxs) # (array([3, 3, 3, 4, 4, 4, 5]), array([5, 6, 7, 5, 6, 7, 6])) 现在场上有两个球
                     if len(idxs[0]) > 0:
                         xs, ys = idxs[0], idxs[1]
                         oppo_ball_already = 4 - self.obs['throws left'][self.contrl_oppo_player_idx
@@ -159,16 +175,22 @@ class rule_agent:
                         if abs(angle) > 30:
                             angle = 30 if angle > 0 else -30
 
-                    if angle == 0:
+                    if angle == 0: 
                         action = self.actions_maybe_good_first_hand.pop()
-                        angle, force = action[0], action[1]
+                        angle, force = action[0], action[1]  
                     else:
                         if abs(angle) > 20:
-                            force = 100
+                            force = 200 #default: 100
+                    oppo_ball_already1 = 4 - self.obs['throws left'][self.contrl_oppo_player_idx]
+                    
+                                          
+                    if oppo_ball_already1==0: # 我方第一个球
+                        angle=0
+                        force=50  
                     self.action_mark = (angle, force)
 
-                elif self.count > self.mark:
-                    angle, force = 0, self.action_mark[1]
+                elif self.count > self.mark: 
+                    angle, force = 0, self.action_mark[1] # 这个作用是保证小球的轨迹保持第30步的决策，让其按照30步的决策
             return angle, force
         
         else:
@@ -176,23 +198,66 @@ class rule_agent:
 
     def step(self, observation):
         actions = self.anaylse(observation)
-        if actions:
-            angle, force = actions[0], actions[1]
-            if self.count <= 3:
-                action = [160, 0]
-            elif 3 < self.count <= 4:
-                action = [-100, 0]
-            elif self.count > self.mark:
-                action = [force, 0]
-            elif self.count == self.mark:
-                action = [force, angle]
+        if not self.if_first_hand: # 我方是后手
+            if actions:
+                angle, force = actions[0], actions[1]
+                
+                if self.count <= 3:
+                    action = [160, 0]
+                elif 3 < self.count <= 4:
+                    action = [-100, 0]
+                elif self.count > self.mark:
+                    action = [force, 0]
+                elif self.count == self.mark:
+                    action = [force, angle]
+                else:
+                    action = [0, 0]
+                self.count += 1
+                print('force', action[0])
+                return action
             else:
-                action = [0, 0]
-            self.count += 1
-            print('force', action[0])
-            return action
-        else:
-            return None
+                return None
+        else:   # 我方是先手
+            if actions:
+                angle, force = actions[0], actions[1]
+                if self.first_ball_FirstHand==True: # 第一个球这么放，后面的球加大力度
+                    if self.count <= 0:
+                        action = [20, 30]
+                    elif self.count > self.mark:
+                        action = [5, 0]
+                    elif self.count == self.mark:
+                        action = [force, angle]
+                    else:
+                        action = [20, 0]
+                elif self.last_ball_FirstHand==True: # NOTE:最后一个球，这个球的力度再减少一点
+                    if self.count <= 0:
+                        action = [15, 0]
+                    elif self.count > self.mark:
+                        action = [4, 0]
+                    elif self.count == self.mark:
+                        action = [force, 0]
+                    else:
+                        action = [10, 0]
+                else:
+                    if force==200:
+                        force=force
+                    else:
+                        force=200
+                    if self.count <= 0:
+                        action = [200, 0]
+                    # elif 3 < self.count <= 4:
+                    #     action = [-100, 0]
+                    elif self.count > self.mark:
+                        action = [force, 0]
+                    elif self.count == self.mark:
+                        action = [force, angle]
+                    else:
+                        action = [100, 0]
+                self.count += 1
+                print('force', action[0])
+                return action
+            else:
+                return None
 
 
 rule = rule_agent()
