@@ -125,6 +125,7 @@ class rule_agent:
         self.a = None
         self.key_pos = None
         self.move = None
+        self.move_copy = None
 
         self.turn_cnt_1 = 0
         self.turn_cnt_2 = 0
@@ -140,6 +141,7 @@ class rule_agent:
         self.a = None
         self.key_pos = None
         self.move = None
+        self.move_copy = None
 
         self.turn_cnt_1 = 0
         self.turn_cnt_2 = 0
@@ -206,6 +208,7 @@ class rule_agent:
             print("check avg_y: ", avg_y)
             self.move = avg_y / 30 * 300 - 150
             # TODO: 如果没有对方球 会报错
+            self.move_copy = self.move
             self.move = abs(self.move)
             self.move_cnt_org = file[str(round(self.move))]["t1"] + file[str(round(self.move))]["t2"]
             # self.move_a1 = file[round(self.move)]["a1"]
@@ -213,7 +216,7 @@ class rule_agent:
     
     def make_turn_move_shoot(self):
         if self.move:
-            left = True if self.move > 0 else False
+            left = True if self.move_copy > 0 else False
             move = file[str(round(self.move))]
 
             # turn 
